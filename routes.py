@@ -1,4 +1,4 @@
-"""The 13 IMDb endpoints. Every path is served with and without the `/imdb`
+"""The 14 IMDb endpoints. Every path is served with and without the `/imdb`
 prefix, so code generated against the hosted API on RapidAPI (paths like
 /title/details) runs unchanged against this server."""
 import json
@@ -11,7 +11,7 @@ from imdb.fetch import ImdbBadRequest, ImdbNotFound
 from imdb.person import get_person_details
 from imdb.search import search_titles
 from imdb.title import (get_title_cast, get_title_details, get_title_episodes,
-                        get_title_reviews)
+                        get_title_images, get_title_reviews)
 
 
 def json_response(data, status=200):
@@ -75,6 +75,13 @@ def title_details_route():
                        not_found=f"title not found: {title}")
 
 
+def title_images_route():
+    title, err = required("title_id")
+    return err or call("title/images", lambda: get_title_images(
+        title, cursor=q("cursor"), country=q("country")),
+        not_found=f"title not found: {title}")
+
+
 def title_cast_route():
     title, err = required("title_id")
     return err or call("title/cast", lambda: get_title_cast(title, cursor=q("cursor"), country=q("country")),
@@ -113,6 +120,7 @@ def chart_route(kind):
 
 ENDPOINTS = [
     ("/title/details", title_details_route),
+    ("/title/images", title_images_route),
     ("/search", search_route),
     ("/autocomplete", autocomplete_route),
     ("/title/cast", title_cast_route),

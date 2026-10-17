@@ -323,6 +323,27 @@ def parse_title_details(data):
     }
 
 
+# --- title images ------------------------------------------------------------
+
+def parse_images(data):
+    """TitleImages data -> (title header, image list, pagination); None when missing."""
+    node = data.get("title")
+    if _missing_title(node):
+        return None
+    conn = node.get("images") or {}
+    images = []
+    for edge in conn.get("edges") or []:
+        image_node = _dig(edge, "node")
+        image = _image(image_node)
+        if image is not None:
+            images.append({"id": image_node.get("id"), **image,
+                           "caption": _dig(image_node, "caption", "plainText")})
+    header = {"id": node.get("id"),
+              "title": _dig(node, "titleText", "text"),
+              "link": _title_link(node.get("id"))}
+    return header, images, _pagination(conn)
+
+
 # --- title cast --------------------------------------------------------------
 
 def parse_cast(data):

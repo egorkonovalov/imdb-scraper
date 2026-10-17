@@ -1,4 +1,4 @@
-"""IMDB title endpoints: details, cast, reviews, episodes.
+"""IMDB title endpoints: details, images, cast, reviews, episodes.
 
 All GraphQL over plain curl_cffi (imdb/fetch.py). `title_id` accepts a bare
 tt-id or any imdb.com /title/ URL. Cursors are the opaque GraphQL pageInfo
@@ -9,6 +9,7 @@ Smoke test (plain HTTP, no chrome pools, ONLY_SCRAPER not required):
 
     python imdb/title.py details tt0111161
     python imdb/title.py details tt0944947            # TV: seasons block
+    python imdb/title.py images tt0111161
     python imdb/title.py cast tt0944947
     python imdb/title.py reviews tt1375666 newest
     python imdb/title.py episodes tt0944947           # seasons list
@@ -24,6 +25,7 @@ from imdb import parsers, queries  # noqa: E402
 from imdb import fetch  # noqa: E402  (module import so tests can monkeypatch)
 
 CAST_PAGE_SIZE = 50
+IMAGES_PAGE_SIZE = 50
 REVIEWS_PAGE_SIZE = 25
 EPISODES_PAGE_SIZE = 50
 MAX_SEASON = 1000
@@ -44,6 +46,28 @@ def get_title_details(title_id, country=None):
         raise fetch.ImdbNotFound(f"title not found: {title_id}")
     result["country"] = country
     return result
+
+
+def get_title_images(title_id, cursor=None, country=None):
+    """One page of image links and metadata (50 per page, cursor-paginated)."""
+    title_id = queries.normalize_title_id(title_id)
+    country = queries.normalize_country(country)
+
+    variables = {"id": title_id, "first": IMAGES_PAGE_SIZE}
+    if cursor:
+        variables["after"] = cursor
+    data = fetch.fetch_graphql(queries.TITLE_IMAGES, variables, country=country)
+    parsed = parsers.parse_images(data)
+    if parsed is None:
+        raise fetch.ImdbNotFound(f"title not found: {title_id}")
+    header, images, pagination = parsed
+    return {
+        **header,
+        "country": country,
+        "count": len(images),
+        "pagination": pagination,
+        "results": images,
+    }
 
 
 def get_title_cast(title_id, cursor=None, country=None):
@@ -147,6 +171,8 @@ if __name__ == "__main__":
     extra = sys.argv[3] if len(sys.argv) > 3 else None
     if command == "details":
         out = get_title_details(arg_id)
+    elif command == "images":
+        out = get_title_images(arg_id, cursor=extra)
     elif command == "cast":
         out = get_title_cast(arg_id, cursor=extra)
     elif command == "reviews":

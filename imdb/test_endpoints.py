@@ -16,7 +16,7 @@ from imdb.charts import get_chart  # noqa: E402
 from imdb.person import get_person_details  # noqa: E402
 from imdb.search import search_titles  # noqa: E402
 from imdb.title import (get_title_cast, get_title_details,  # noqa: E402
-                        get_title_episodes, get_title_reviews)
+                        get_title_episodes, get_title_images, get_title_reviews)
 
 FIXTURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
@@ -103,6 +103,48 @@ def test_title_details_not_found(monkeypatch):
                         lambda *a, **k: _fixture("title_details_missing_stub.json"))
     with pytest.raises(fetch.ImdbNotFound):
         get_title_details("tt9999999999")
+
+
+# ---- images -----------------------------------------------------------------
+
+@pytest.mark.parametrize("cursor", [None, "CURSOR+/=123"])
+def test_images_envelope(monkeypatch, cursor):
+    def fake_graphql(query, variables, country="US"):
+        assert query == queries.TITLE_IMAGES
+        expected = {"id": "tt0111161", "first": 50}
+        if cursor:
+            expected["after"] = cursor
+        assert variables == expected
+        assert country == "IN"
+        return _fixture("title_images_page1.json")
+
+    monkeypatch.setattr(fetch, "fetch_graphql", fake_graphql)
+    out = get_title_images("https://www.imdb.com/title/tt0111161/",
+                           cursor=cursor, country="in")
+    assert out["id"] == "tt0111161"
+    assert out["country"] == "IN"
+    assert out["count"] == len(out["results"]) == 50
+    assert out["pagination"]["has_more"] is True
+    assert out["pagination"]["next_cursor"]
+    assert out["results"][0]["link"].startswith("https://m.media-amazon.com/")
+
+
+@pytest.mark.parametrize("payload", [{"title": None},
+                                    {"title": {"id": "tt9999999999", "titleText": None}}])
+def test_images_not_found(monkeypatch, payload):
+    monkeypatch.setattr(fetch, "fetch_graphql", lambda *a, **k: payload)
+    with pytest.raises(fetch.ImdbNotFound):
+        get_title_images("tt9999999999")
+
+
+@pytest.mark.parametrize("title_id,country", [("invalid", None), ("tt0111161", "USA")])
+def test_images_reject_bad_input_before_fetch(monkeypatch, title_id, country):
+    def unexpected_fetch(*args, **kwargs):
+        pytest.fail("Invalid input must not reach IMDb")
+
+    monkeypatch.setattr(fetch, "fetch_graphql", unexpected_fetch)
+    with pytest.raises(ValueError):
+        get_title_images(title_id, country=country)
 
 
 # ---- cast / reviews / episodes ----------------------------------------------

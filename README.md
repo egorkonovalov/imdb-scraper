@@ -6,6 +6,7 @@ IMDb Scraper is a **free and open-source** scraper that gets you **unlimited** d
 
 - 🔍 **Search 11M+ titles** — filter by type, genre, year; sort how you like
 - 🎬 **Full title details** — cast, Metascore, box office, trailer & more
+- 🖼️ **Title images** — direct image links, dimensions and captions
 - 📺 **Episodes, reviews & people** — seasons, full review text, filmographies
 - 📈 **All 6 IMDb charts** — Top 250s, Most Popular, Box Office, Celebrities
 
@@ -105,7 +106,7 @@ curl "http://localhost:8000/title/details?title_id=tt4154796"
 }
 ```
 
-All 13 endpoints are now live at `http://localhost:8000`.
+All 14 endpoints are now live at `http://localhost:8000`.
 
 ## 👀 Try It Without Installing
 
@@ -119,11 +120,12 @@ Once you're happy with the data quality, run the open-source version above for *
 
 ## 📚 Endpoints
 
-13 endpoints cover everything you need.
+14 endpoints cover everything you need.
 
 | Endpoint | Path | Returns |
 |---|---|---|
 | Title Details | `/title/details` | Everything about one title in a single call |
+| Title Images | `/title/images` | Image links, dimensions and captions, 50 per page |
 | Search Titles | `/search` | 50 titles per page; filter by type, genre, or year; sortable |
 | Autocomplete | `/autocomplete` | Typeahead for titles and people |
 | Title Cast | `/title/cast` | Full credits with character names, 50 per page |
@@ -134,6 +136,38 @@ Once you're happy with the data quality, run the open-source version above for *
 | Most Popular Movies / TV | `/charts/popular-movies`, `/charts/popular-tv` | MovieMeter / TVMeter top 100 |
 | Weekend Box Office | `/charts/box-office` | US top 10 with weekend and worldwide gross |
 | Popular Celebrities | `/charts/popular-celebrities` | StarMeter top 100 |
+
+### Film image links
+
+```bash
+curl "http://localhost:8000/title/images?title_id=tt0111161"
+```
+
+Also available at `/imdb/title/images`. The required `title_id` accepts an
+IMDb `tt` ID or a full IMDb title URL. Optional parameters are `country`
+(two-letter code, default `US`) and `cursor` (the previous response's
+`pagination.next_cursor`). Pass the cursor unchanged and URL-encode it when
+building a query string.
+
+The response contains `id`, `title`, `link`, `country`, `count`, `pagination`
+and `results`. Each result contains `id`, `link` (the direct image URL),
+`width`, `height` and `caption`. Images without a usable URL are skipped;
+missing metadata is `null`. `pagination` contains `total`, `has_more` and
+`next_cursor`; the cursor is `null` on the last page. A title with no images
+returns an empty `results` list. Invalid parameters return HTTP 400 and
+nonexistent titles return HTTP 404.
+
+From Python:
+
+```python
+from imdb.title import get_title_images
+
+page = get_title_images("tt0111161")
+links = [image["link"] for image in page["results"]]
+if page["pagination"]["has_more"]:
+    next_page = get_title_images(
+        "tt0111161", cursor=page["pagination"]["next_cursor"])
+```
 
 
 ## 🔍 Exploring Parameters

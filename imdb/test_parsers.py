@@ -7,6 +7,7 @@ v3.sg.media-imdb.com suggestion API, saved verbatim except the two chart
 fixtures whose edge lists are trimmed to 5 rows to keep the repo light.
 title_details_missing_stub.json is the nonexistent-id stub payload (IMDB
 echoes {id, titleText: null, ...} instead of a null title). No network.
+title_images_page1.json is a full live capture of the image gallery query.
 """
 import json
 import os
@@ -109,6 +110,49 @@ def test_details_sparse_nulls():
 
 def test_details_missing_stub():
     assert parsers.parse_title_details(MISSING) is None
+
+
+# ---- images -----------------------------------------------------------------
+
+def test_images():
+    data = _fixture("title_images_page1.json")
+    header, images, pagination = parsers.parse_images(data)
+    assert header == {"id": "tt0111161", "title": "The Shawshank Redemption",
+                      "link": "https://www.imdb.com/title/tt0111161/"}
+    assert len(images) == 50
+    raw = data["title"]["images"]["edges"][0]["node"]
+    assert images[0] == {"id": raw["id"], "link": raw["url"],
+                         "width": 1800, "height": 1200,
+                         "caption": raw["caption"]["plainText"]}
+    assert pagination["total"] > 50
+    assert pagination["has_more"] is True
+    assert pagination["next_cursor"] == data["title"]["images"]["pageInfo"]["endCursor"]
+
+
+def test_images_empty_gallery():
+    for connection in (None, {}, {"total": 0, "edges": [],
+                                  "pageInfo": {"hasNextPage": False, "endCursor": None}}):
+        _, images, pagination = parsers.parse_images({"title": {
+            "id": "tt0111161", "titleText": {"text": "A film"}, "images": connection}})
+        assert images == []
+        assert pagination["has_more"] is False
+        assert pagination["next_cursor"] is None
+
+
+def test_images_sparse_metadata_and_unusable_nodes():
+    _, images, pagination = parsers.parse_images({"title": {
+        "id": "tt0111161", "titleText": {"text": "A film"}, "images": {
+            "total": 5, "edges": [None, {}, {"node": None}, {"node": {"url": None}},
+                                   {"node": {"url": "https://example.com/image.jpg"}}],
+            "pageInfo": {"hasNextPage": False, "endCursor": "LAST"}}}})
+    assert images == [{"id": None, "link": "https://example.com/image.jpg",
+                       "width": None, "height": None, "caption": None}]
+    assert pagination == {"total": 5, "has_more": False, "next_cursor": None}
+
+
+def test_images_missing_title():
+    assert parsers.parse_images(MISSING) is None
+    assert parsers.parse_images({"title": None}) is None
 
 
 # ---- cast -------------------------------------------------------------------

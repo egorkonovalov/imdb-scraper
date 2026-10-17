@@ -163,6 +163,19 @@ query TitleDetails($id: ID!) {
   }
 }"""
 
+TITLE_IMAGES = """
+query TitleImages($id: ID!, $first: Int!, $after: ID) {
+  title(id: $id) {
+    id
+    titleText { text }
+    images(first: $first, after: $after) {
+      total
+      pageInfo { endCursor hasNextPage }
+      edges { node { id url width height caption { plainText } } }
+    }
+  }
+}"""
+
 TITLE_CAST = """
 query TitleCast($id: ID!, $first: Int!, $after: ID) {
   title(id: $id) {
