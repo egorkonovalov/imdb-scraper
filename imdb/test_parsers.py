@@ -13,6 +13,8 @@ import json
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from imdb import parsers  # noqa: E402
@@ -29,6 +31,66 @@ MOVIE = _fixture("title_details_movie.json")
 TV = _fixture("title_details_tv.json")
 SPARSE = _fixture("title_details_sparse.json")
 MISSING = _fixture("title_details_missing_stub.json")
+
+
+# ---- thumbnail URLs ---------------------------------------------------------
+
+@pytest.mark.parametrize("suffix", [".jpg", ".jpeg", "._V1_.jpg",
+                                    "._V1_SX300_.jpg",
+                                    "._V1_UX128_CR0,3,128,176_AL_.jpg",
+                                    "._V1_CR179,76,815,1223_.jpg"])
+def test_thumbnail_variants_preserve_original(suffix):
+    asset = "https://m.media-amazon.com/images/M/MV5B-example_123@@"
+    url = asset + suffix
+    image = parsers._image({"url": url, "width": 1200, "height": 1800})
+    assert image == {"link": url, "width": 1200, "height": 1800,
+                     "thumbnails": {
+                         "96": asset + "._V1_SX96_.jpg",
+                         "144": asset + "._V1_SX144_.jpg",
+                         "192": asset + "._V1_SX192_.jpg"}}
+
+
+@pytest.mark.parametrize("url", [
+    "https://example.com/image.jpg",
+    "http://m.media-amazon.com/images/M/asset._V1_.jpg",
+    "https://m.media-amazon.com.example.com/images/M/asset._V1_.jpg",
+    "https://m.media-amazon.com@other.example/images/M/asset._V1_.jpg",
+    "https://m.media-amazon.com/images/I/asset.jpg",
+    "https://m.media-amazon.com/images/M/asset.png",
+    "https://m.media-amazon.com/images/M/asset._V2_.jpg",
+    "https://m.media-amazon.com/images/M/asset.jpg?token=abc",
+    "https://m.media-amazon.com/images/M/asset.jpg\n",
+])
+def test_unrecognized_images_keep_original_without_thumbnails(url):
+    assert parsers._image({"url": url}) == {
+        "link": url, "width": None, "height": None, "thumbnails": {}}
+
+
+@pytest.mark.parametrize("node", [None, {}, {"url": None}, {"url": ""}])
+def test_missing_image_remains_null(node):
+    assert parsers._image(node) is None
+
+
+@pytest.mark.parametrize("parse,fixture", [
+    (parsers.parse_title_details, "title_details_movie.json"),
+    (parsers.parse_search, "search_page1.json"),
+    (parsers.parse_chart_titles, "chart_top_movies_trimmed.json"),
+    (parsers.parse_images, "title_images_page1.json"),
+    (parsers.parse_suggestions, "suggestions_shawshank.json"),
+    (parsers.parse_person, "person_details.json"),
+])
+def test_thumbnail_variants_across_parsers(parse, fixture):
+    def check_images(value):
+        if isinstance(value, dict):
+            if {"link", "width", "height"} <= value.keys():
+                assert set(value["thumbnails"]) == {"96", "144", "192"}
+                return 1
+            return sum(check_images(child) for child in value.values())
+        if isinstance(value, (list, tuple)):
+            return sum(check_images(child) for child in value)
+        return 0
+
+    assert check_images(parse(_fixture(fixture))) > 0
 
 
 # ---- autocomplete -----------------------------------------------------------
@@ -123,6 +185,7 @@ def test_images():
     raw = data["title"]["images"]["edges"][0]["node"]
     assert images[0] == {"id": raw["id"], "link": raw["url"],
                          "width": 1800, "height": 1200,
+                         "thumbnails": parsers._thumbnails(raw["url"]),
                          "caption": raw["caption"]["plainText"]}
     assert pagination["total"] > 50
     assert pagination["has_more"] is True
@@ -146,7 +209,8 @@ def test_images_sparse_metadata_and_unusable_nodes():
                                    {"node": {"url": "https://example.com/image.jpg"}}],
             "pageInfo": {"hasNextPage": False, "endCursor": "LAST"}}}})
     assert images == [{"id": None, "link": "https://example.com/image.jpg",
-                       "width": None, "height": None, "caption": None}]
+                       "width": None, "height": None, "thumbnails": {},
+                       "caption": None}]
     assert pagination == {"total": 5, "has_more": False, "next_cursor": None}
 
 

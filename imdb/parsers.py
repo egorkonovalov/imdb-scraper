@@ -11,8 +11,13 @@ LocalizedString language wrappers (presentation-only), contribution/reporting
 links (imdb-internal), video playbackURLs (expiring signed CDN links — the
 stable video page link is emitted instead), suggestion `vq`/`v` video counts.
 """
+import re
 
 IMDB = "https://www.imdb.com"
+THUMBNAIL_WIDTHS = (96, 144, 192)
+_IMDB_IMAGE_RE = re.compile(
+    r"\A(https://m\.media-amazon\.com/images/M/[A-Za-z0-9@_-]+)"
+    r"(?:\._V1_[A-Za-z0-9_,.-]*)?\.jpe?g\Z")
 
 
 def _dig(obj, *path, default=None):
@@ -36,13 +41,23 @@ def _person_link(person_id):
     return f"{IMDB}/name/{person_id}/" if person_id else None
 
 
+def _thumbnails(url):
+    """Width-only CDN variants for recognized IMDb images; otherwise empty."""
+    match = _IMDB_IMAGE_RE.fullmatch(url) if isinstance(url, str) else None
+    if match is None:
+        return {}
+    return {str(width): f"{match.group(1)}._V1_SX{width}_.jpg"
+            for width in THUMBNAIL_WIDTHS}
+
+
 def _image(node):
-    """Image node -> {link, width, height} (or None)."""
+    """Image node -> original link/dimensions plus CDN thumbnails (or None)."""
     if not isinstance(node, dict) or not node.get("url"):
         return None
     return {"link": node["url"],
             "width": node.get("width"),
-            "height": node.get("height")}
+            "height": node.get("height"),
+            "thumbnails": _thumbnails(node["url"])}
 
 
 def _money(node):
@@ -151,10 +166,10 @@ def parse_suggestions(payload):
         item_id = item.get("id") or ""
         image = None
         raw_image = item.get("i")
-        if isinstance(raw_image, dict) and raw_image.get("imageUrl"):
-            image = {"link": raw_image["imageUrl"],
-                     "width": raw_image.get("width"),
-                     "height": raw_image.get("height")}
+        if isinstance(raw_image, dict):
+            image = _image({"url": raw_image.get("imageUrl"),
+                            "width": raw_image.get("width"),
+                            "height": raw_image.get("height")})
         if item_id.startswith("nm"):
             results.append({
                 "id": item_id,

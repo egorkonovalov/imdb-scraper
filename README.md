@@ -151,7 +151,7 @@ building a query string.
 
 The response contains `id`, `title`, `link`, `country`, `count`, `pagination`
 and `results`. Each result contains `id`, `link` (the direct image URL),
-`width`, `height` and `caption`. Images without a usable URL are skipped;
+`width`, `height`, `thumbnails` and `caption`. Images without a usable URL are skipped;
 missing metadata is `null`. `pagination` contains `total`, `has_more` and
 `next_cursor`; the cursor is `null` on the last page. A title with no images
 returns an empty `results` list. Invalid parameters return HTTP 400 and
@@ -169,6 +169,43 @@ if page["pagination"]["has_more"]:
         "tt0111161", cursor=page["pagination"]["next_cursor"])
 ```
 
+
+### Small images for compact lists
+
+Image objects include a `thumbnails` map with direct IMDb CDN URLs for
+96, 144 and 192 pixel widths. This applies to search, charts, details,
+autocomplete, people and gallery results. No extra request to this API is
+needed to get these URLs.
+
+```json
+{
+  "link": "https://m.media-amazon.com/images/M/ASSET._V1_.jpg",
+  "width": 1200,
+  "height": 1800,
+  "thumbnails": {
+    "96": "https://m.media-amazon.com/images/M/ASSET._V1_SX96_.jpg",
+    "144": "https://m.media-amazon.com/images/M/ASSET._V1_SX144_.jpg",
+    "192": "https://m.media-amazon.com/images/M/ASSET._V1_SX192_.jpg"
+  }
+}
+```
+
+`ASSET` is illustrative. `link`, `width` and `height` describe the original
+image. Thumbnail URLs request width-only resizing, preserving the source
+aspect ratio; height is not fixed and existing CDN crop instructions are
+replaced. Only recognized HTTPS IMDb CDN JPEG URLs receive variants;
+other URL formats have `thumbnails: {}`. Missing images remain `null`.
+
+For native mobile lists, multiply the displayed width in points by the
+device scale, then choose the smallest sufficient variant, capped at 192px.
+A 48-point poster uses `thumbnails["96"]` at 2× or `thumbnails["144"]` at 3×.
+For displays requiring more than 192px, use the original `link`.
+Cache downloaded images by variant URL and downsample during decoding to
+limit memory use. Fit or crop the image in the UI as needed.
+
+IMDb's CDN transformation convention is not a guaranteed public API. Show
+a placeholder if a thumbnail fails to load or no suitable URL is available.
+Our backend generates URLs only; image downloads go directly to IMDb's CDN.
 
 ## 🔍 Exploring Parameters
 
